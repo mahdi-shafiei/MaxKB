@@ -44,8 +44,8 @@
             <div class="flex align-center">
               <img class="mr-12" src="@/assets/icon_file-doc.svg" alt="" />
               <div>
-                <p>文档（TXT、MD、DOCX、HTML、CSV、XLSX、XLS、PDF）</p>
-                <el-text class="color-secondary">需要与文档内容提取节点配合使用</el-text>
+                <p class="line-height-22 mt-4">文档（TXT、MD、DOCX、HTML、CSV、XLSX、XLS、PDF）</p>
+                <el-text class="color-secondary">需要使用“文档内容提取”节点解析文档内容</el-text>
               </div>
             </div>
             <el-checkbox v-model="form_data.document" />
@@ -61,11 +61,28 @@
             <div class="flex align-center">
               <img class="mr-12" src="@/assets/icon_file-image.svg" alt="" />
               <div>
-                <p>图片（JPG、JPEG、PNG、GIF）</p>
-                <el-text class="color-secondary">所选模型需要支持接收图片</el-text>
+                <p class="line-height-22 mt-4">图片（JPG、JPEG、PNG、GIF）</p>
+                <el-text class="color-secondary">需要使用“图片理解”节点解析图片内容</el-text>
               </div>
             </div>
             <el-checkbox v-model="form_data.image" />
+          </div>
+        </el-card>
+        <el-card
+          shadow="hover"
+          class="card-checkbox cursor w-full mb-8"
+          :class="form_data.audio ? 'active' : ''"
+          style="--el-card-padding: 8px 16px"
+        >
+          <div class="flex-between">
+            <div class="flex align-center">
+              <img class="mr-12" src="@/assets/icon_file-image.svg" alt="" />
+              <div>
+                <p class="line-height-22 mt-4">音频（MP3）</p>
+                <el-text class="color-secondary">所选模型支持接收音频或与语音转文本节点配合使用</el-text>
+              </div>
+            </div>
+            <el-checkbox v-model="form_data.audio" />
           </div>
         </el-card>
       </el-form-item>

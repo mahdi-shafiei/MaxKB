@@ -6,7 +6,7 @@
         <div
           class="p-8-12"
           v-loading="localLoading"
-          v-if="uploadDocumentList.length || uploadImageList.length"
+          v-if="uploadDocumentList.length || uploadImageList.length || uploadAudioList.length || uploadVideoList.length"
         >
           <el-space wrap>
             <template v-for="(item, index) in uploadDocumentList" :key="index">
@@ -53,6 +53,27 @@
                 />
               </div>
             </template>
+            <template v-for="(item, index) in uploadAudioList" :key="index">
+              <el-card shadow="never" style="--el-card-padding: 8px" class="file cursor">
+                <div
+                  class="flex align-center"
+                  @mouseenter.stop="mouseenter(item)"
+                  @mouseleave.stop="mouseleave()"
+                >
+                  <div
+                    @click="deleteFile(index, 'audio')"
+                    class="delete-icon color-secondary"
+                    v-if="showDelete === item.url"
+                  >
+                    <el-icon><CircleCloseFilled /></el-icon>
+                  </div>
+                  <img :src="getImgUrl(item && item?.name)" alt="" width="24" />
+                  <div class="ml-4 ellipsis" style="max-width: 160px" :title="item && item?.name">
+                    {{ item && item?.name }}
+                  </div>
+                </div>
+              </el-card>
+            </template>
           </el-space>
         </div>
       </el-scrollbar>
@@ -75,24 +96,26 @@
 
         <div class="operate flex align-center">
           <span v-if="props.applicationDetails.file_upload_enable" class="flex align-center">
-            <!--            accept="image/jpeg, image/png, image/gif"-->
             <el-upload
               action="#"
+              multiple
               :auto-upload="false"
               :show-file-list="false"
               :accept="getAcceptList()"
               :on-change="(file: any, fileList: any) => uploadFile(file, fileList)"
             >
               <el-tooltip effect="dark" placement="top" popper-class="upload-tooltip-width">
-                <template #content
-                  >上传文件：最多{{
-                    props.applicationDetails.file_upload_setting.maxFiles
-                  }}个，每个文件限制
-                  {{ props.applicationDetails.file_upload_setting.fileLimit }}MB<br />文件类型：{{
-                    getAcceptList()
-                  }}</template
-                >
-                <el-button text>
+                <template #content>
+                  <div class="break-all pre-wrap">
+                    上传文件：最多{{
+                      props.applicationDetails.file_upload_setting.maxFiles
+                    }}个，每个文件限制
+                    {{ props.applicationDetails.file_upload_setting.fileLimit }}MB<br />文件类型：{{
+                      getAcceptList().replace(/\./g, '').replace(/,/g, '、').toUpperCase()
+                    }}
+                  </div>
+                </template>
+                <el-button text :disabled="checkMaxFilesLimit()" class="mt-4">
                   <el-icon><Paperclip /></el-icon>
                 </el-button>
               </el-tooltip>
@@ -198,7 +221,7 @@ const localLoading = computed({
 const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp']
 const documentExtensions = ['pdf', 'docx', 'txt', 'xls', 'xlsx', 'md', 'html', 'csv']
 const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'flv']
-const audioExtensions = ['mp3', 'wav', 'aac', 'flac']
+const audioExtensions = ['mp3']
 
 const getAcceptList = () => {
   const { image, document, audio, video } = props.applicationDetails.file_upload_setting
@@ -216,13 +239,23 @@ const getAcceptList = () => {
     accepts = [...accepts, ...videoExtensions]
   }
   // console.log(accepts)
+  if (accepts.length === 0) {
+    return '.请在文件上传配置中选择文件类型'
+  }
   return accepts.map((ext: any) => '.' + ext).join(',')
+}
+
+const checkMaxFilesLimit = () => {
+  return (
+    props.applicationDetails.file_upload_setting.maxFiles <=
+    uploadImageList.value.length + uploadDocumentList.value.length + uploadAudioList.value.length + uploadVideoList.value.length
+  )
 }
 
 const uploadFile = async (file: any, fileList: any) => {
   const { maxFiles, fileLimit } = props.applicationDetails.file_upload_setting
   // 单次上传文件数量限制
-  const file_limit_once = uploadImageList.value.length + uploadDocumentList.value.length
+  const file_limit_once = uploadImageList.value.length + uploadDocumentList.value.length + uploadAudioList.value.length + uploadVideoList.value.length
   if (file_limit_once >= maxFiles) {
     MsgWarning('最多上传' + maxFiles + '个文件')
     fileList.splice(0, fileList.length)
@@ -234,22 +267,22 @@ const uploadFile = async (file: any, fileList: any) => {
     fileList.splice(0, fileList.length)
     return
   }
-  const formData = new FormData()
-  for (const file of fileList) {
-    formData.append('file', file.raw, file.name)
-    //
-    const extension = file.name.split('.').pop().toLowerCase() // 获取文件后缀名并转为小写
 
-    if (imageExtensions.includes(extension)) {
-      uploadImageList.value.push(file)
-    } else if (documentExtensions.includes(extension)) {
-      uploadDocumentList.value.push(file)
-    } else if (videoExtensions.includes(extension)) {
-      // videos.push(file)
-    } else if (audioExtensions.includes(extension)) {
-      // audios.push(file)
-    }
+  const formData = new FormData()
+  formData.append('file', file.raw, file.name)
+  //
+  const extension = file.name.split('.').pop().toLowerCase() // 获取文件后缀名并转为小写
+
+  if (imageExtensions.includes(extension)) {
+    uploadImageList.value.push(file)
+  } else if (documentExtensions.includes(extension)) {
+    uploadDocumentList.value.push(file)
+  } else if (videoExtensions.includes(extension)) {
+    uploadVideoList.value.push(file)
+  } else if (audioExtensions.includes(extension)) {
+    uploadAudioList.value.push(file)
   }
+
 
   if (!chatId_context.value) {
     const res = await props.openChatId()
@@ -285,7 +318,20 @@ const uploadFile = async (file: any, fileList: any) => {
           file.file_id = f[0].file_id
         }
       })
-      console.log(uploadDocumentList.value, uploadImageList.value)
+      uploadAudioList.value.forEach((file: any) => {
+        const f = response.data.filter((f: any) => f.name === file.name)
+        if (f.length > 0) {
+          file.url = f[0].url
+          file.file_id = f[0].file_id
+        }
+      })
+      uploadVideoList.value.forEach((file: any) => {
+        const f = response.data.filter((f: any) => f.name === file.name)
+        if (f.length > 0) {
+          file.url = f[0].url
+          file.file_id = f[0].file_id
+        }
+      })
     })
 }
 const recorderTime = ref(0)
@@ -294,6 +340,8 @@ const recorderLoading = ref(false)
 const inputValue = ref<string>('')
 const uploadImageList = ref<Array<any>>([])
 const uploadDocumentList = ref<Array<any>>([])
+const uploadVideoList = ref<Array<any>>([])
+const uploadAudioList = ref<Array<any>>([])
 const mediaRecorderStatus = ref(true)
 const showDelete = ref('')
 
@@ -421,11 +469,15 @@ function sendChatHandle(event: any) {
       if (inputValue.value.trim()) {
         props.sendMessage(inputValue.value, {
           image_list: uploadImageList.value,
-          document_list: uploadDocumentList.value
+          document_list: uploadDocumentList.value,
+          audio_list: uploadAudioList.value,
+          video_list: uploadVideoList.value,
         })
         inputValue.value = ''
         uploadImageList.value = []
         uploadDocumentList.value = []
+        uploadAudioList.value = []
+        uploadVideoList.value = []
         quickInputRef.value.textareaStyle.height = '45px'
       }
     }
@@ -440,6 +492,10 @@ function deleteFile(index: number, val: string) {
     uploadImageList.value.splice(index, 1)
   } else if (val === 'document') {
     uploadDocumentList.value.splice(index, 1)
+  } else if (val === 'video') {
+    uploadVideoList.value.splice(index, 1)
+  } else if (val === 'audio') {
+    uploadAudioList.value.splice(index, 1)
   }
 }
 function mouseenter(row: any) {

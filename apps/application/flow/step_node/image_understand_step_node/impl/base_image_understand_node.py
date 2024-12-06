@@ -6,7 +6,7 @@ from functools import reduce
 from typing import List, Dict
 
 from django.db.models import QuerySet
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage
 
 from application.flow.i_step_node import NodeResult, INode
 from application.flow.step_node.image_understand_step_node.i_image_understand_node import IImageUnderstandNode
@@ -57,23 +57,35 @@ def write_context(node_variable: Dict, workflow_variable: Dict, node: INode, wor
     _write_context(node_variable, workflow_variable, node, workflow, answer)
 
 
+def file_id_to_base64(file_id: str):
+    file = QuerySet(File).filter(id=file_id).first()
+    base64_image = base64.b64encode(file.get_byte()).decode("utf-8")
+    return base64_image
+
+
 class BaseImageUnderstandNode(IImageUnderstandNode):
     def save_context(self, details, workflow_manage):
         self.context['answer'] = details.get('answer')
         self.context['question'] = details.get('question')
         self.answer_text = details.get('answer')
 
-    def execute(self, model_id, system, prompt, dialogue_number, dialogue_type, history_chat_record, stream, chat_id, chat_record_id,
+    def execute(self, model_id, system, prompt, dialogue_number, dialogue_type, history_chat_record, stream, chat_id,
+                chat_record_id,
                 image,
                 **kwargs) -> NodeResult:
+        # 处理不正确的参数
+        if image is None or not isinstance(image, list):
+            image = []
+
         image_model = get_model_instance_by_model_user_id(model_id, self.flow_params_serializer.data.get('user_id'))
         # 执行详情中的历史消息不需要图片内容
-        history_message =self.get_history_message_for_details(history_chat_record, dialogue_number)
+        history_message = self.get_history_message_for_details(history_chat_record, dialogue_number)
         self.context['history_message'] = history_message
         question = self.generate_prompt_question(prompt)
         self.context['question'] = question.content
         # 生成消息列表, 真实的history_message
-        message_list = self.generate_message_list(image_model, system, prompt, self.get_history_message(history_chat_record, dialogue_number), image)
+        message_list = self.generate_message_list(image_model, system, prompt,
+                                                  self.get_history_message(history_chat_record, dialogue_number), image)
         self.context['message_list'] = message_list
         self.context['image_list'] = image
         self.context['dialogue_type'] = dialogue_type
@@ -88,19 +100,42 @@ class BaseImageUnderstandNode(IImageUnderstandNode):
                                'history_message': history_message, 'question': question.content}, {},
                               _write_context=write_context)
 
-    @staticmethod
-    def get_history_message_for_details(history_chat_record, dialogue_number):
+    def get_history_message_for_details(self, history_chat_record, dialogue_number):
         start_index = len(history_chat_record) - dialogue_number
         history_message = reduce(lambda x, y: [*x, *y], [
-            [history_chat_record[index].get_human_message(), history_chat_record[index].get_ai_message()]
+            [self.generate_history_human_message_for_details(history_chat_record[index]),
+             self.generate_history_ai_message(history_chat_record[index])]
             for index in
             range(start_index if start_index > 0 else 0, len(history_chat_record))], [])
         return history_message
 
+    def generate_history_ai_message(self, chat_record):
+        for val in chat_record.details.values():
+            if self.node.id == val['node_id'] and 'image_list' in val:
+                if val['dialogue_type'] == 'WORKFLOW':
+                    return chat_record.get_ai_message()
+                return AIMessage(content=val['answer'])
+        return chat_record.get_ai_message()
+
+    def generate_history_human_message_for_details(self, chat_record):
+        for data in chat_record.details.values():
+            if self.node.id == data['node_id'] and 'image_list' in data:
+                image_list = data['image_list']
+                if len(image_list) == 0 or data['dialogue_type'] == 'WORKFLOW':
+                    return HumanMessage(content=chat_record.problem_text)
+                file_id_list = [image.get('file_id') for image in image_list]
+                return HumanMessage(content=[
+                    {'type': 'text', 'text': data['question']},
+                    *[{'type': 'image_url', 'image_url': {'url': f'/api/file/{file_id}'}} for file_id in file_id_list]
+
+                ])
+        return HumanMessage(content=chat_record.problem_text)
+
     def get_history_message(self, history_chat_record, dialogue_number):
         start_index = len(history_chat_record) - dialogue_number
         history_message = reduce(lambda x, y: [*x, *y], [
-            [self.generate_history_human_message(history_chat_record[index]), history_chat_record[index].get_ai_message()]
+            [self.generate_history_human_message(history_chat_record[index]),
+             self.generate_history_ai_message(history_chat_record[index])]
             for index in
             range(start_index if start_index > 0 else 0, len(history_chat_record))], [])
         return history_message
@@ -112,13 +147,12 @@ class BaseImageUnderstandNode(IImageUnderstandNode):
                 image_list = data['image_list']
                 if len(image_list) == 0 or data['dialogue_type'] == 'WORKFLOW':
                     return HumanMessage(content=chat_record.problem_text)
-                file_id = image_list[0]['file_id']
-                file = QuerySet(File).filter(id=file_id).first()
-                base64_image = base64.b64encode(file.get_byte()).decode("utf-8")
+                image_base64_list = [file_id_to_base64(image.get('file_id')) for image in image_list]
                 return HumanMessage(
                     content=[
                         {'type': 'text', 'text': data['question']},
-                        {'type': 'image_url', 'image_url': {'url': f'data:image/jpeg;base64,{base64_image}'}},
+                        *[{'type': 'image_url', 'image_url': {'url': f'data:image/jpeg;base64,{base64_image}'}} for
+                          base64_image in image_base64_list]
                     ])
         return HumanMessage(content=chat_record.problem_text)
 

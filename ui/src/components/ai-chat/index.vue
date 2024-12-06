@@ -23,7 +23,7 @@
           <AnswerContent
             :application="applicationDetails"
             :loading="loading"
-            :chat-record="item"
+            v-model:chat-record="chatList[index]"
             :type="type"
             :send-message="sendMessage"
             :chat-management="ChatManagement"
@@ -222,10 +222,9 @@ const getWrite = (chat: any, reader: any, stream: boolean) => {
           for (const index in split) {
             const chunk = JSON?.parse(split[index].replace('data:', ''))
             chat.chat_id = chunk.chat_id
-            chat.record_id = chunk.id
-            const content = chunk?.content
-            if (content) {
-              ChatManagement.append(chat.id, content)
+            chat.record_id = chunk.chat_record_id
+            if (!chunk.is_end) {
+              ChatManagement.appendChunk(chat.id, chunk)
             }
             if (chunk.is_end) {
               // 流处理成功 返回成功回调
@@ -280,7 +279,7 @@ function chatMessage(chat?: any, problem?: string, re_chat?: boolean, other_para
       id: randomId(),
       problem_text: problem ? problem : inputValue.value.trim(),
       answer_text: '',
-      answer_text_list: [''],
+      answer_text_list: [{ content: '' }],
       buffer: [],
       write_ed: false,
       is_stop: false,
@@ -305,6 +304,10 @@ function chatMessage(chat?: any, problem?: string, re_chat?: boolean, other_para
       // 将滚动条滚动到最下面
       scrollDiv.value.setScrollTop(getMaxHeight())
     })
+  }
+  if (chat.run_time) {
+    ChatManagement.addChatRecord(chat, 50, loading)
+    ChatManagement.write(chat.id)
   }
   if (!chartOpenId.value) {
     getChartOpenId(chat).catch(() => {

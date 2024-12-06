@@ -1,7 +1,7 @@
 <template>
   <div>
     <DynamicsForm
-      :disabled="is_submit"
+      :disabled="is_submit || disabled"
       label-position="top"
       require-asterisk-position="right"
       ref="dynamicsFormRef"
@@ -10,7 +10,10 @@
       v-model="form_data"
       :model="form_data"
     ></DynamicsForm>
-    <el-button :type="is_submit ? 'info' : 'primary'" :disabled="is_submit" @click="submit"
+    <el-button
+      :type="is_submit ? 'info' : 'primary'"
+      :disabled="is_submit || disabled"
+      @click="submit"
       >提交</el-button
     >
   </div>
@@ -18,10 +21,19 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import DynamicsForm from '@/components/dynamics-form/index.vue'
-const props = defineProps<{
-  form_setting: string
-  sendMessage?: (question: string, type: 'old' | 'new', other_params_data?: any) => void
-}>()
+const props = withDefaults(
+  defineProps<{
+    form_setting: string
+    disabled?: boolean
+    sendMessage?: (question: string, type: 'old' | 'new', other_params_data?: any) => void
+    child_node?: any
+    chat_record_id?: string
+    runtime_node_id?: string
+  }>(),
+  {
+    disabled: false
+  }
+)
 const form_setting_data = computed(() => {
   if (props.form_setting) {
     return JSON.parse(props.form_setting)
@@ -52,7 +64,6 @@ const is_submit = computed(() => {
 const _form_data = ref<any>({})
 const form_data = computed({
   get: () => {
-    console.log(form_setting_data.value)
     if (form_setting_data.value.is_submit) {
       return form_setting_data.value.form_data
     } else {
@@ -67,11 +78,11 @@ const dynamicsFormRef = ref<InstanceType<typeof DynamicsForm>>()
 const submit = () => {
   dynamicsFormRef.value?.validate().then(() => {
     _submit.value = true
-    const setting = JSON.parse(props.form_setting)
     if (props.sendMessage) {
       props.sendMessage('', 'old', {
-        runtime_node_id: setting.runtime_node_id,
-        chat_record_id: setting.chat_record_id,
+        child_node: props.child_node,
+        runtime_node_id: props.runtime_node_id,
+        chat_record_id: props.chat_record_id,
         node_data: form_data.value
       })
     }

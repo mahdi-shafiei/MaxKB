@@ -29,14 +29,27 @@ def write_context(step_variable: Dict, global_variable: Dict, node, workflow):
 
 class BaseFormNode(IFormNode):
     def save_context(self, details, workflow_manage):
+        form_data = details.get('form_data', None)
         self.context['result'] = details.get('result')
         self.context['form_content_format'] = details.get('form_content_format')
         self.context['form_field_list'] = details.get('form_field_list')
         self.context['run_time'] = details.get('run_time')
         self.context['start_time'] = details.get('start_time')
+        self.context['form_data'] = form_data
+        self.context['is_submit'] = details.get('is_submit')
         self.answer_text = details.get('result')
+        if form_data is not None:
+            for key in form_data:
+                self.context[key] = form_data[key]
 
-    def execute(self, form_field_list, form_content_format, **kwargs) -> NodeResult:
+    def execute(self, form_field_list, form_content_format, form_data, **kwargs) -> NodeResult:
+        if form_data is not None:
+            self.context['is_submit'] = True
+            self.context['form_data'] = form_data
+            for key in form_data:
+                self.context[key] = form_data.get(key)
+        else:
+            self.context['is_submit'] = False
         form_setting = {"form_field_list": form_field_list, "runtime_node_id": self.runtime_node_id,
                         "chat_record_id": self.flow_params_serializer.data.get("chat_record_id"),
                         "is_submit": self.context.get("is_submit", False)}
@@ -57,7 +70,8 @@ class BaseFormNode(IFormNode):
         form = f'<form_rander>{json.dumps(form_setting)}</form_rander>'
         prompt_template = PromptTemplate.from_template(form_content_format, template_format='jinja2')
         value = prompt_template.format(form=form)
-        return value
+        return {'content': value, 'runtime_node_id': self.runtime_node_id,
+                'chat_record_id': self.workflow_params['chat_record_id']}
 
     def get_details(self, index: int, **kwargs):
         form_content_format = self.context.get('form_content_format')
@@ -77,6 +91,7 @@ class BaseFormNode(IFormNode):
             "form_field_list": self.context.get('form_field_list'),
             'form_data': self.context.get('form_data'),
             'start_time': self.context.get('start_time'),
+            'is_submit': self.context.get('is_submit'),
             'run_time': self.context.get('run_time'),
             'type': self.node.type,
             'status': self.status,

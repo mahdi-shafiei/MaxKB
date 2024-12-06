@@ -17,49 +17,28 @@
     </template>
     <template #footer>
       <div class="footer-content flex-between">
-        <el-text class="flex align-center" style="width: 70%">
-          <el-icon class="mr-4" :size="25">
-            <img
-              src="@/assets/doc-icon.svg"
-              style="width: 90%"
-              alt=""
-              v-if="data?.document_name?.includes('doc')"
-            />
-            <img
-              src="@/assets/docx-icon.svg"
-              style="width: 90%"
-              alt=""
-              v-else-if="data?.document_name?.includes('docx')"
-            />
-            <img
-              src="@/assets/pdf-icon.svg"
-              style="width: 90%"
-              alt=""
-              v-else-if="data?.document_name?.includes('pdf')"
-            />
-            <img
-              src="@/assets/md-icon.svg"
-              style="width: 90%"
-              alt=""
-              v-else-if="data?.document_name?.includes('md')"
-            />
-            <img
-              src="@/assets/xls-icon.svg"
-              style="width: 90%"
-              alt=""
-              v-else-if="data?.document_name?.includes('xls')"
-            />
-            <img
-              src="@/assets/txt-icon.svg"
-              style="width: 90%"
-              alt=""
-              v-else-if="data?.document_name?.includes('txt')"
-            />
-            <img src="@/assets/doc-icon.svg" style="width: 90%" alt="" v-else />
-          </el-icon>
-          <span class="ellipsis" :title="data?.document_name?.trim()">
-            {{ data?.document_name.trim() }}</span
-          >
+        <el-text class="flex align-center" style="width: 50%">
+          <img :src="getImgUrl(data?.document_name?.trim())" alt="" width="20" class="mr-4" />
+
+          <template v-if="meta?.source_url">
+            <a
+              :href="
+                meta?.source_url && !meta?.source_url.endsWith('/')
+                  ? meta?.source_url + '/'
+                  : meta?.source_url
+              "
+              target="_blank"
+              class="ellipsis"
+              :title="data?.document_name?.trim()"
+            >
+              {{ data?.document_name?.trim() }}
+            </a>
+          </template>
+          <template v-else>
+            <span class="ellipsis" :title="data?.document_name?.trim()">
+              {{ data?.document_name?.trim() }}
+            </span>
+          </template>
         </el-text>
         <div class="flex align-center" style="line-height: 32px">
           <AppAvatar class="mr-8 avatar-blue" shape="square" :size="18">
@@ -73,6 +52,9 @@
   </CardBox>
 </template>
 <script setup lang="ts">
+import { getImgUrl } from '@/utils/utils'
+import { computed } from 'vue'
+
 const props = defineProps({
   data: {
     type: Object,
@@ -83,28 +65,22 @@ const props = defineProps({
     default: 0
   }
 })
-const iconMap: { [key: string]: string } = {
-  doc: '../../assets/doc-icon.svg',
-  docx: '../../assets/docx-icon.svg',
-  pdf: '../../assets/pdf-icon.svg',
-  md: '../../assets/md-icon.svg',
-  txt: '../../assets/txt-icon.svg',
-  xls: '../../assets/xls-icon.svg',
-  xlsx: '../../assets/xlsx-icon.svg'
-}
-function getIconPath(documentName: string) {
-  const extension = documentName.split('.').pop()?.toLowerCase()
-  if (!documentName || !extension) return new URL(`${iconMap['doc']}`, import.meta.url).href
-  if (iconMap && extension && iconMap[extension]) {
-    return new URL(`${iconMap[extension]}`, import.meta.url).href
+const isMetaObject = computed(() => typeof props.data.meta === 'object')
+const parsedMeta = computed(() => {
+  try {
+    return JSON.parse(props.data.meta)
+  } catch (e) {
+    return {}
   }
-  return new URL(`${iconMap['doc']}`, import.meta.url).href
-}
+})
+
+const meta = computed(() => (isMetaObject.value ? props.data.meta : parsedMeta.value))
 </script>
 <style lang="scss" scoped>
 .paragraph-source-card-height {
   height: 260px;
 }
+
 @media only screen and (max-width: 768px) {
   .paragraph-source-card-height {
     height: 285px;
