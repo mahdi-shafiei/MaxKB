@@ -33,7 +33,7 @@
 
           <div @mousemove.stop @mousedown.stop @keydown.stop @click.stop>
             <el-button text @click="showNode = !showNode" class="mr-4">
-              <el-icon class="arrow-icon" :class="showNode ? 'rotate-180' : ''"
+              <el-icon class="arrow-icon color-secondary" :class="showNode ? 'rotate-180' : ''"
                 ><ArrowDownBold />
               </el-icon>
             </el-button>
@@ -93,9 +93,8 @@
         v-if="showAnchor"
         @mousemove.stop
         @mousedown.stop
-        @keydown.stop
         @click.stop
-        @wheel.stop
+        @wheel="handleWheel"
         :show="showAnchor"
         :id="id"
         style="left: 100%; top: 50%; transform: translate(0, -50%)"
@@ -142,6 +141,12 @@ const showNode = computed({
     return true
   }
 })
+const handleWheel = (event: any) => {
+  const isCombinationKeyPressed = event.ctrlKey || event.metaKey
+  if (!isCombinationKeyPressed) {
+    event.stopPropagation()
+  }
+}
 const node_status = computed(() => {
   if (props.nodeModel.properties.status) {
     return props.nodeModel.properties.status

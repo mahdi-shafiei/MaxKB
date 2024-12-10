@@ -23,10 +23,10 @@
               迁移
             </el-button>
             <el-button @click="batchRefresh" :disabled="multipleSelection.length === 0">
-              重新向量化
+              向量化
             </el-button>
             <el-button @click="openGenerateDialog()" :disabled="multipleSelection.length === 0">
-              生成关联问题
+              生成问题
             </el-button>
             <el-button @click="openBatchEditDocument" :disabled="multipleSelection.length === 0">
               设置
@@ -99,33 +99,43 @@
                         >全部</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '1' ? 'is-active' : ''"
+                        :class="filterMethod['status'] === State.SUCCESS ? 'is-active' : ''"
                         class="justify-center"
-                        :command="beforeCommand('status', '1')"
+                        :command="beforeCommand('status', State.SUCCESS)"
                         >成功</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '2' ? 'is-active' : ''"
+                        :class="filterMethod['status'] === State.FAILURE ? 'is-active' : ''"
                         class="justify-center"
-                        :command="beforeCommand('status', '2')"
+                        :command="beforeCommand('status', State.FAILURE)"
                         >失败</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '0' ? 'is-active' : ''"
+                        :class="
+                          filterMethod['status'] === State.STARTED &&
+                          filterMethod['task_type'] == TaskType.EMBEDDING
+                            ? 'is-active'
+                            : ''
+                        "
                         class="justify-center"
-                        :command="beforeCommand('status', '0')"
+                        :command="beforeCommand('status', State.STARTED, TaskType.EMBEDDING)"
                         >索引中</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '3' ? 'is-active' : ''"
+                        :class="filterMethod['status'] === State.PENDING ? 'is-active' : ''"
                         class="justify-center"
-                        :command="beforeCommand('status', '3')"
+                        :command="beforeCommand('status', State.PENDING)"
                         >排队中</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '4' ? 'is-active' : ''"
+                        :class="
+                          filterMethod['status'] === State.STARTED &&
+                          filterMethod['task_type'] === TaskType.GENERATE_PROBLEM
+                            ? 'is-active'
+                            : ''
+                        "
                         class="justify-center"
-                        :command="beforeCommand('status', '4')"
+                        :command="beforeCommand('status', State.STARTED, TaskType.GENERATE_PROBLEM)"
                         >生成问题中</el-dropdown-item
                       >
                     </el-dropdown-menu>
@@ -134,21 +144,7 @@
               </div>
             </template>
             <template #default="{ row }">
-              <el-text v-if="row.status === '1'">
-                <el-icon class="success"><SuccessFilled /></el-icon> 成功
-              </el-text>
-              <el-text v-else-if="row.status === '2'">
-                <el-icon class="danger"><CircleCloseFilled /></el-icon> 失败
-              </el-text>
-              <el-text v-else-if="row.status === '0'">
-                <el-icon class="is-loading primary"><Loading /></el-icon> 索引中
-              </el-text>
-              <el-text v-else-if="row.status === '3'">
-                <el-icon class="is-loading primary"><Loading /></el-icon> 排队中
-              </el-text>
-              <el-text v-else-if="row.status === '4'">
-                <el-icon class="is-loading primary"><Loading /></el-icon> 生成问题中
-              </el-text>
+              <StatusVlue :status="row.status" :status-meta="row.status_meta"></StatusVlue>
             </template>
           </el-table-column>
           <el-table-column width="130">
@@ -249,7 +245,25 @@
             <template #default="{ row }">
               <div v-if="datasetDetail.type === '0'">
                 <span class="mr-4">
-                  <el-tooltip effect="dark" content="重新向量化" placement="top">
+                  <el-tooltip
+                    effect="dark"
+                    v-if="
+                      ([State.STARTED, State.PENDING] as Array<string>).includes(
+                        getTaskState(row.status, TaskType.EMBEDDING)
+                      )
+                    "
+                    content="取消向量化"
+                    placement="top"
+                  >
+                    <el-button
+                      type="primary"
+                      text
+                      @click.stop="cancelTask(row, TaskType.EMBEDDING)"
+                    >
+                      <AppIcon iconName="app-close" style="font-size: 16px"></AppIcon>
+                    </el-button>
+                  </el-tooltip>
+                  <el-tooltip v-else effect="dark" content="向量化" placement="top">
                     <el-button type="primary" text @click.stop="refreshDocument(row)">
                       <AppIcon iconName="app-document-refresh" style="font-size: 16px"></AppIcon>
                     </el-button>
@@ -269,9 +283,20 @@
                     </el-button>
                     <template #dropdown>
                       <el-dropdown-menu>
-                        <el-dropdown-item @click="openGenerateDialog(row)">
+                        <el-dropdown-item
+                          v-if="
+                            ([State.STARTED, State.PENDING] as Array<string>).includes(
+                              getTaskState(row.status, TaskType.GENERATE_PROBLEM)
+                            )
+                          "
+                          @click="cancelTask(row, TaskType.GENERATE_PROBLEM)"
+                        >
                           <el-icon><Connection /></el-icon>
-                          生成关联问题
+                          取消生成问题
+                        </el-dropdown-item>
+                        <el-dropdown-item v-else @click="openGenerateDialog(row)">
+                          <el-icon><Connection /></el-icon>
+                          生成问题
                         </el-dropdown-item>
                         <el-dropdown-item @click="openDatasetDialog(row)">
                           <AppIcon iconName="app-migrate"></AppIcon>
@@ -298,7 +323,26 @@
                   </el-tooltip>
                 </span>
                 <span class="mr-4">
-                  <el-tooltip effect="dark" content="重新向量化" placement="top">
+                  <el-tooltip
+                    effect="dark"
+                    v-if="
+                      ([State.STARTED, State.PENDING] as Array<string>).includes(
+                        getTaskState(row.status, TaskType.EMBEDDING)
+                      )
+                    "
+                    content="取消向量化"
+                    placement="top"
+                  >
+                    <el-button
+                      type="primary"
+                      text
+                      @click.stop="cancelTask(row, TaskType.EMBEDDING)"
+                    >
+                      <AppIcon iconName="app-close" style="font-size: 16px"></AppIcon>
+                    </el-button>
+                  </el-tooltip>
+
+                  <el-tooltip effect="dark" v-else content="向量化" placement="top">
                     <el-button type="primary" text @click.stop="refreshDocument(row)">
                       <AppIcon iconName="app-document-refresh" style="font-size: 16px"></AppIcon>
                     </el-button>
@@ -315,9 +359,20 @@
                         <el-dropdown-item icon="Setting" @click="settingDoc(row)"
                           >设置</el-dropdown-item
                         >
-                        <el-dropdown-item @click="openGenerateDialog(row)">
+                        <el-dropdown-item
+                          v-if="
+                            ([State.STARTED, State.PENDING] as Array<string>).includes(
+                              getTaskState(row.status, TaskType.GENERATE_PROBLEM)
+                            )
+                          "
+                          @click="cancelTask(row, TaskType.GENERATE_PROBLEM)"
+                        >
                           <el-icon><Connection /></el-icon>
-                          生成关联问题
+                          取消生成问题
+                        </el-dropdown-item>
+                        <el-dropdown-item v-else @click="openGenerateDialog(row)">
+                          <el-icon><Connection /></el-icon>
+                          生成问题
                         </el-dropdown-item>
                         <el-dropdown-item @click="openDatasetDialog(row)">
                           <AppIcon iconName="app-migrate"></AppIcon>
@@ -360,7 +415,9 @@ import { datetimeFormat } from '@/utils/time'
 import { hitHandlingMethod } from '@/enums/document'
 import { MsgSuccess, MsgConfirm, MsgError } from '@/utils/message'
 import useStore from '@/stores'
+import StatusVlue from '@/views/document/component/Status.vue'
 import GenerateRelatedDialog from '@/views/document/component/GenerateRelatedDialog.vue'
+import { TaskType, State } from '@/utils/status'
 const router = useRouter()
 const route = useRoute()
 const {
@@ -368,9 +425,11 @@ const {
 } = route as any
 
 const { common, dataset, document } = useStore()
-
 const storeKey = 'documents'
-
+const getTaskState = (status: string, taskType: number) => {
+  const statusList = status.split('').reverse()
+  return taskType - 1 > statusList.length + 1 ? 'n' : statusList[taskType - 1]
+}
 onBeforeRouteUpdate(() => {
   common.savePage(storeKey, null)
   common.saveCondition(storeKey, null)
@@ -432,16 +491,25 @@ function openDatasetDialog(row?: any) {
 
 function dropdownHandle(obj: any) {
   filterMethod.value[obj.attr] = obj.command
+  if (obj.attr == 'status') {
+    filterMethod.value['task_type'] = obj.task_type
+  }
+
   getList()
 }
 
-function beforeCommand(attr: string, val: any) {
+function beforeCommand(attr: string, val: any, task_type?: number) {
   return {
     attr: attr,
-    command: val
+    command: val,
+    task_type
   }
 }
-
+const cancelTask = (row: any, task_type: number) => {
+  documentApi.cancelTask(row.dataset_id, row.id, { type: task_type }).then(() => {
+    MsgSuccess('发送成功')
+  })
+}
 function syncDataset() {
   SyncWebDialogRef.value.open(id)
 }
@@ -570,7 +638,7 @@ function batchRefresh() {
     }
   })
   documentApi.batchRefresh(id, arr, loading).then(() => {
-    MsgSuccess('批量重新向量化成功')
+    MsgSuccess('批量向量化成功')
     multipleTableRef.value?.clearSelection()
   })
 }
@@ -583,7 +651,7 @@ function batchGenerateRelated() {
     }
   })
   documentApi.batchGenerateRelated(id, arr, loading).then(() => {
-    MsgSuccess('批量生成关联问题成功')
+    MsgSuccess('批量生成问题成功')
     multipleTableRef.value?.clearSelection()
   })
 }

@@ -1,20 +1,31 @@
 <template>
-  <div class="radio_content" v-resize="resize" :style="radioContentStyle">
-    <el-card
-      v-for="item in option_list"
-      :key="item.value"
-      class="item"
-      shadow="never"
-      :class="[modelValue == item[valueField] ? 'active' : '']"
-      @click="selected(item[valueField])"
-    >
-      {{ item[textField] }}
-    </el-card>
+  <div class="radio_content" :style="radioContentStyle">
+    <el-row :gutter="12" class="w-full">
+      <template v-for="(item,index) in option_list" :key="index">
+        <el-col :xs="24" :sm="24" :md="24" :lg="12" :xl="12">
+          <el-card
+            :key="item.value"
+            class="item"
+            shadow="never"
+            :class="[
+              inputDisabled ? 'is-disabled' : '',
+              modelValue == item[valueField] ? 'active' : ''
+            ]"
+            @click="inputDisabled ? () => {} : selected(item[valueField])"
+          >
+            {{ item[textField] }}
+          </el-card>
+        </el-col>
+      </template>
+    </el-row>
   </div>
 </template>
 <script lang="ts" setup>
 import { computed, ref } from 'vue'
 import type { FormField } from '@/components/dynamics-form/type'
+import { useFormDisabled } from 'element-plus'
+const inputDisabled = useFormDisabled()
+
 const props = defineProps<{
   formValue?: any
   formfieldList?: Array<FormField>
@@ -24,6 +35,7 @@ const props = defineProps<{
   view?: boolean
   // 选中的值
   modelValue?: any
+  disabled?: boolean
 }>()
 
 const selected = (activeValue: string | number) => {
@@ -66,8 +78,19 @@ const option_list = computed(() => {
   flex-wrap: wrap;
   justify-content: flex-start;
   width: 100%;
+
+  .is-disabled {
+    border: 1px solid var(--el-card-border-color);
+    background-color: var(--el-fill-color-light);
+    color: var(--el-text-color-placeholder);
+    cursor: not-allowed;
+    &:hover {
+      cursor: not-allowed;
+    }
+  }
   .active {
     border: 1px solid var(--el-color-primary);
+    color: var(--el-color-primary);
   }
   .item {
     cursor: pointer;

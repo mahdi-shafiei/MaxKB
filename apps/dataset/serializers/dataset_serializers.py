@@ -15,6 +15,7 @@ from functools import reduce
 from typing import Dict, List
 from urllib.parse import urlparse
 
+from celery_once import AlreadyQueued, QueueOnce
 from django.contrib.postgres.fields import ArrayField
 from django.core import validators
 from django.db import transaction, models
@@ -27,6 +28,7 @@ from application.models import ApplicationDatasetMapping
 from common.config.embedding_config import VectorStore
 from common.db.search import get_dynamics_model, native_page_search, native_search
 from common.db.sql_execute import select_list
+from common.event import ListenerManagement
 from common.exception.app_exception import AppApiException
 from common.mixins.api_mixin import ApiMixin
 from common.util.common import post, flat_map, valid_license
@@ -34,7 +36,8 @@ from common.util.field_message import ErrMessage
 from common.util.file_util import get_file_content
 from common.util.fork import ChildLink, Fork
 from common.util.split_model import get_split_model
-from dataset.models.data_set import DataSet, Document, Paragraph, Problem, Type, ProblemParagraphMapping, Status
+from dataset.models.data_set import DataSet, Document, Paragraph, Problem, Type, ProblemParagraphMapping, Status, \
+    TaskType, State
 from dataset.serializers.common_serializers import list_paragraph, MetaSerializer, ProblemParagraphManage, \
     get_embedding_model_by_dataset_id, get_embedding_model_id_by_dataset_id
 from dataset.serializers.document_serializers import DocumentSerializers, DocumentInstanceSerializer
@@ -137,14 +140,14 @@ class DataSetSerializers(serializers.ModelSerializer):
             query_set = QuerySet(model=get_dynamics_model(
                 {'temp.name': models.CharField(), 'temp.desc': models.CharField(),
                  "document_temp.char_length": models.IntegerField(), 'temp.create_time': models.DateTimeField(),
-                 'temp.user_id': models.CharField(), }))
+                 'temp.user_id': models.CharField(), 'temp.id': models.CharField()}))
             if "desc" in self.data and self.data.get('desc') is not None:
                 query_set = query_set.filter(**{'temp.desc__icontains': self.data.get("desc")})
             if "name" in self.data and self.data.get('name') is not None:
                 query_set = query_set.filter(**{'temp.name__icontains': self.data.get("name")})
             if "select_user_id" in self.data and self.data.get('select_user_id') is not None:
                 query_set = query_set.filter(**{'temp.user_id__exact': self.data.get("select_user_id")})
-            query_set = query_set.order_by("-temp.create_time")
+            query_set = query_set.order_by("-temp.create_time", "temp.id")
             query_set_dict['default_sql'] = query_set
 
             query_set_dict['dataset_custom_sql'] = QuerySet(model=get_dynamics_model(
@@ -730,14 +733,22 @@ class DataSetSerializers(serializers.ModelSerializer):
             delete_embedding_by_dataset(self.data.get('id'))
             return True
 
+        @transaction.atomic
         def re_embedding(self, with_valid=True):
             if with_valid:
                 self.is_valid(raise_exception=True)
-
-            QuerySet(Document).filter(dataset_id=self.data.get('id')).update(**{'status': Status.queue_up})
-            QuerySet(Paragraph).filter(dataset_id=self.data.get('id')).update(**{'status': Status.queue_up})
+            ListenerManagement.update_status(QuerySet(Document).filter(dataset_id=self.data.get('id')),
+                                             TaskType.EMBEDDING,
+                                             State.PENDING)
+            ListenerManagement.update_status(QuerySet(Paragraph).filter(dataset_id=self.data.get('id')),
+                                             TaskType.EMBEDDING,
+                                             State.PENDING)
+            ListenerManagement.get_aggregation_document_status_by_dataset_id(self.data.get('id'))()
             embedding_model_id = get_embedding_model_id_by_dataset_id(self.data.get('id'))
-            embedding_by_dataset.delay(self.data.get('id'), embedding_model_id)
+            try:
+                embedding_by_dataset.delay(self.data.get('id'), embedding_model_id)
+            except AlreadyQueued as e:
+                raise AppApiException(500, "向量化任务发送失败，请稍后再试！")
 
         def list_application(self, with_valid=True):
             if with_valid:

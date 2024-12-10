@@ -51,10 +51,10 @@ class TextSplitHandle(BaseSplitHandle):
                 'content': split_model.parse(content)
                 }
 
-    def get_content(self, file):
+    def get_content(self, file, save_image):
         buffer = file.read()
         try:
            return buffer.decode(detect(buffer)['encoding'])
         except BaseException as e:
             traceback.print_exception(e)
-            return ''
+            return f'{e}'
